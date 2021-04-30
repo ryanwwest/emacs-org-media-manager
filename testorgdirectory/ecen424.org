@@ -1,0 +1,910 @@
+#+TITLE: ecen424
+#byu #classes #swe #cpe
+
+This is a test org file to be used for adding images pasted from the clipboard with SPC N CMD V, deleting them, then garbage collecting.
+
+
+* Book Notes
+** Chapter 1: Introduction
+The operating system has 2 purposes:
+1. protect the hardware from misuse by runaway applications
+2. provide applications with simple and uniform mechanisms for manipulating
+   complicated and often wildly different low-level hardware devices
+
+   When starting a program, code begins at the same fixed-address for all
+   processes, followed by data locations that correspond to global C variables.
+
+   Even though we made a substantial improvement to a major part of the system,
+   our net speedup was significantly less than the speedup for the one part.
+   This is the major insight of Amdahl's law - to significantly speed up the
+   entire system, we must improve the speed of a very large fraction
+   overall system.
+
+
+
+Amdahl's Questions number 4
+10 = 1/((1-alpha) + (alpha/100)
+
+
+
+
+
+  [[file:media/20200105_171147_rWR6sP.png]]
+  Multiprocessing can improve system performance in 2 ways:
+   1. reduce need to simulate concurrency when performing multiple tasks
+   2. can run a single application program faster, but only if that program is
+      expressed in terms of mulitple threads that can be effectively executed in
+      parallel.
+
+  Superscalar processor - can sustain execution rates faster than 1 instruction
+   per cycle (instruction-level parallelism)
+
+   Summary:
+   A computer system consists of hardware and systems softwrae that cooperate to
+   run application programs.
+
+** Chapter 2: Representing and Manipulating Information
+A logical right shift fills left end with k zeros, while an arithmetic right
+shift fills it with k repititions of the most significant bit (1 or 0).
+* 1/13/19 floating point numbers
++-a * 2^b
+ - where a is encoded as frac and b is encoded as exp in following
+ - | s | exp - 8 - | frac - 23 - |
+
+to represent exponent in IEEE floating point number, use a bias offset but just store the 8 exponent bits from 0-255. Then subtract by 127 (or another bias) + 1 (to match smallest normalized numbers) to get value.
+
+There are also ways to store +/- infinity, NaN, 0...
+Simplified FP - s1|exp4|frac3
+*** 8 bit FP examples
+representation below: s | exp | frac
+|------------+----+-------+-----------------------------|
+| s exp  frc |  E |   val | notes                       |
+|------------+----+-------+-----------------------------|
+| 0 0000 000 | -6 |     0 | denormalized to represent 0 |
+| 0 0000 001 | -6 | 1/512 | closest to zero denorm      |
+| 0 0111 000 |  0 |     1 | normalized                  |
+| 0 1111 000 | na |   inf | special                     |
+| 0 1111 111 | na |   NaN | special                     |
+|------------+----+-------+-----------------------------|
+
+exam question possibility: in 8 bit fp format, what is bit representation of
+smallest denormalized number
+
+Floating point operations: if frac is off, round to nearest. if exp off, under/overflow
+
+*** Casting/Conversions
+casting double/flot -> int
+ - truncates fractional part (rounds towards zero)
+int -> double
+ - exact conversion as long as int has <= 53 bit word size
+operation involving mix of int/float/double will use the size with biggest range
+* 1/17/19 leaq cmpq setq, other obscure instructions
+
+leaq 4(x, y), rcx == 4+x+y -> store in rcx
+leaq (x, y, 2), rcx == x + y*2 -> store in rcx
+
+leaq wasn't designed for arithmetic so it can't set any of the flags
+instead, use explicit setting by compare instruction
+cmpq - compare quad word (subtracts a from b, throws away the result and sets all
+flags)
+
+testq does the same thing with AND (only sets ZF and SF)
+
+all set instructions will set the dest reg if one of the sign registers is set/unset
+example: sete checks ZF, sets dest if it is 0
+- does not alter remaining bytes; movzbl is typically used to clear out higher bits
+
+*** example for computing if x > y:
+int gt (long x, long y) {
+    return x > y;
+}
+
+cmpq   %rsi,%rdi # Comparex:y
+setg   %al       # Set when >
+movzbl %al,%eax  # Zero rest of %raxretNote
+
+* 1/24
+Stack frame sizes are determined by the time the program is compil
+* 1/27
+to get to arbitrary element of 2d array A[i][j]
+ = A + (i*c*k) + (j*k)     // (= A + (i*c+j) * k)
+   - where Row i of A is array of c elements, each element requires k bytes
+   - starting address is A + i*c*k
+
+* [[file:~/CloudStation/media/ebooks/School/Winter 2019/Computer Systems cs324.pdf][Homework]]
+** Set 2
+*** 2.87
+
+if it is denormalized/special, remove the assumed 1 from M
+
+| Description          | Hex  | M         |   E | V                 |       D |
+|----------------------+------+-----------+-----+-------------------+---------|
+| -0                   | 0000 | 0         | -14 | 0                 |       0 |
+| smallest val > 2     | 4001 | 1025/1024 |   1 | 1025/1024 x 2^1   | 2.00195 |
+| 512                  | 3000 | 1         |   9 | 512               |     512 |
+| Largest Denomalized  | 03FF | 1023/1024 | -14 | 1023/1024 x 2^-14 | .000061 |
+| -infinity            | FC00 | 0         |  15 | -inf              |    -inf |
+| number with hex 3BB0 | 3BB0 | 15/8      |  -1 | 15/8 * 2^-1       |   .9375 |
+
+*** 2.93
+#+BEGIN_SRC c
+float_bits float_absval(float_bits f) {
+    float_bits g = 0x7FFFFFFF & f;
+    // if all exponent bits are set then this is special (might be NaN)
+    if ((0x7F800000 & f) == 0x7F800000) {
+        if ((0x7FFFFF & f) != 0) {
+            // this is NaN
+            return f;
+        }
+    }
+    return g;
+}
+#+END_SRC
+
+*** 3.58
+#+BEGIN_SRC c
+long decode2(long x, long y, long z) {
+    y -= z;
+    x *= y;
+    long rax = y;
+    rax <<= 63;
+    rax >>= 63;
+    x ^= rax;
+    return x;
+}
+#+END_SRC
+
+#+BEGIN_SRC asm
+decode2:
+    subq    %rdx, %rsi
+    imulq   %rsi, %rdi
+    movq    %rsi, %rax
+    salq    $63, %rax
+    sarq    $63, %rax
+    xorq    %rdi, %rax
+    ret
+#+END_SRC
+
+*** 3.59
+
+Basically this does multiple multiplies and adds them together. One of them just
+does an unsigned multiple, and the other two imulq ones are used to determine
+the sign of the product. Then these are added together.
+
+#+BEGIN_SRC asm
+rdx = y; %rdx:%rax
+
+store_prod:
+    movq %rdx, %rax     ; rax = y
+    cqto                ; rax now uses rdx:rax to store qword
+    movq %rsi, %rcx     ; rcx = x
+    sarq $63, %rcx      ; basically cqto and remember sign bit; use rcx:rsi for qword; signextend rcx now
+    imulq %rax, %rcx    ; xh *= yl store product of rcx and rsi in rdx:rax
+    imulq %rsi, %rdx    ; yh *= xl
+    addq %rdx, %rcx     ; add previous two together: (rcx) h = xh + yh
+    mulq %rsi           ; rdx:rax = xl * yl
+    addq %rcx, %rdx     ; adds all the partial products together
+    movq %rax, (%rdi)   ; store low bits of answer in the address in rdi
+    movq %rdx, 8(%rdi)  ; store high bits of answer in address of rdi + 8
+    ret
+
+#+END_SRC
+
+*** 3.60
+#+BEGIN_SRC asm
+loop:
+    movl   %esi, %ecx
+    movl   $1, %edx
+    movl   $0, %eax
+    jmp    .L2
+.L3:
+    movq   %rdi, %r8
+    andq   %rdx, %r8
+    orq    %r8, %rax
+    salq   %cl, %rdx
+.L2:
+    testq  %rdx, %rdx
+    jne    .L3
+    rep;   ret
+#+END_SRC
+
+a) x: ecx, n: esi, result: eax, mask: edx
+b) result = 0, mask = 1
+c) mask != 0
+d) mask << n
+e) result = (x & mask)
+
+#+BEGIN_SRC c
+long loop(long x, long n)
+{
+    long result = 0;
+    long mask;
+    for (mask = 1; mask != 0; mask = mask << n) {
+        result |= (x & mask);
+    }
+    return result;
+}
+#+END_SRC
+
+#+BEGIN_SRC asm
+loop:
+.LFB0:
+    pushq   %rbp
+    movq    %rsp, %rbp
+    movq    %rdi, -24(%rbp)
+    movq    %rsi, -32(%rbp)
+    movq    $0, -16(%rbp)
+    movq    $1, -8(%rbp)
+    jmp .L2
+.L3:
+    movq    -24(%rbp), %rax
+    andq    -8(%rbp), %rax
+    orq %rax, -16(%rbp)
+    movq    -32(%rbp), %rax
+    movl    %eax, %ecx
+    salq    %cl, -8(%rbp)
+.L2:
+    cmpq    $0, -8(%rbp)
+    jne .L3
+    movq    -16(%rbp), %rax
+    popq    %rbp
+    ret
+#+END_SRC
+
+I used -m64 and -S in gcc.
+** Set 3
+#+LaTeX: \setcounter{secnumdepth}{0}
+#+OPTIONS:   num:nil
+
+*** 3.62
+#+BEGIN_SRC c
+/* Enumerated type creates set of constants numbered 0 and upward */
+typedef enum {MODE_A, MODE_B, MODE_C, MODE_D, MODE_E} mode_t;
+// p1 is rdi, p2 is rsi, action is edx
+long switch3(long *p1, long *p2, mode_t action) {
+    long result = 0;
+    switch(action) {
+        case MODE_A:
+          result = *p2;
+          action = *p1;
+          *p2 = action;
+          break;
+        case MODE_B:
+          result = *p1 + *p2;
+          *p1 = result;
+          break;
+        case MODE_C:
+          *p1 = 59;
+          result = *p2;
+          break;
+        case MODE_D:
+          result = *p2;
+          *p1 = result;
+        case MODE_E:
+          result = 27; // same as movq in this case right?
+          break;
+        default:
+            result = 12;
+            break;
+    }
+    return result;
+}
+#+END_SRC
+
+This was compiled on MacOS using gcc compiler options -S -m64 -O1. Because I used MacOS, the assembly differs from that in the book, but someone I was working with used essentially the same code compiled on Linux and it was identical.
+
+#+BEGIN_SRC asm
+_switch3:                               ## @switch3
+    .cfi_startproc
+## %bb.0:
+    pushq   %rbp
+    .cfi_def_cfa_offset 16
+    .cfi_offset %rbp, -16
+    movq    %rsp, %rbp
+    .cfi_def_cfa_register %rbp
+    cmpl    $4, %edx
+    ja  LBB0_6
+## %bb.1:
+    movl    $27, %eax
+    movl    %edx, %ecx
+    leaq    LJTI0_0(%rip), %rdx
+    movslq  (%rdx,%rcx,4), %rcx
+    addq    %rdx, %rcx
+    jmpq    *%rcx
+LBB0_2:
+    movq    (%rsi), %rax
+    movl    (%rdi), %ecx
+    movq    %rcx, (%rsi)
+    popq    %rbp
+    retq
+LBB0_6:
+    movl    $12, %eax
+LBB0_7:
+    popq    %rbp
+    retq
+LBB0_3:
+    movq    (%rsi), %rax
+    addq    (%rdi), %rax
+    movq    %rax, (%rdi)
+    popq    %rbp
+    retq
+LBB0_4:
+    movq    $59, (%rdi)
+    movq    (%rsi), %rax
+    popq    %rbp
+    retq
+LBB0_5:
+    movq    (%rsi), %rcx
+    movq    %rcx, (%rdi)
+    popq    %rbp
+    retq
+    .cfi_endproc
+    .p2align    2, 0x90
+    .data_region jt32
+
+#+END_SRC
+*** 3.63
+#+BEGIN_SRC c
+long switch_prob(long x, long n) {
+    long result = x;
+    switch(n) {
+      case 0:
+      case 2:
+        result = x * 8;
+        break;
+      case 3:
+        result = x >> 3;
+        break;
+      case 4:
+        result = (x << 4) - x;
+        x = result;
+      case 5:
+        x *= x;
+      case 1:
+      default:
+        result = x + 0x4b;
+        break;
+  }
+  return result;
+}
+#+END_SRC
+
+This was compiled on MacOS using gcc compiler options -S -m64 -O1. Because I used MacOS, the assembly differs from that in the book, but someone I was working with used essentially the same code compiled on Linux and it was identical.
+
+#+BEGIN_SRC asm
+_switch_prob
+    .cfi_startproc
+## %bb.0:
+    pushq   %rbp
+    .cfi_def_cfa_offset 16
+    .cfi_offset %rbp, -16
+    movq    %rsp, %rbp
+    .cfi_def_cfa_register %rbp
+    movq    %rdi, %rax
+    cmpq    $4, %rsi
+    ja  LBB0_5
+## %bb.1:
+    leaq    LJTI0_0(%rip), %rcx
+    movslq  (%rcx,%rsi,4), %rdx
+    addq    %rcx, %rdx
+    jmpq    *%rdx
+LBB0_2:
+    shlq    $3, %rax
+    popq    %rbp
+    retq
+LBB0_3:
+    sarq    $3, %rax
+    popq    %rbp
+    retq
+LBB0_4:
+    leaq    (%rax,%rax,4), %rax
+    leaq    (%rax,%rax,2), %rax
+LBB0_5:
+    addq    $75, %rax
+    popq    %rbp
+    retq
+    .cfi_endproc
+    .p2align    2, 0x90
+    .data_region jt32
+.set L0_0_set_2, LBB0_2-LJTI0_0
+.set L0_0_set_5, LBB0_5-LJTI0_0
+.set L0_0_set_3, LBB0_3-LJTI0_0
+.set L0_0_set_4, LBB0_4-LJTI0_0
+LJTI0_0:
+    .long   L0_0_set_2
+    .long   L0_0_set_5
+    .long   L0_0_set_2
+    .long   L0_0_set_3
+    .long   L0_0_set_4
+    .end_data_region
+
+#+END_SRC
+*** 3.65
+**** a) rdx
+**** b) rax
+**** c) 15
+**** d) This was compiled on MacOS using gcc compiler options -S -m64 -O1. Because I used MacOS, the assembly differs from that in the book, but someone I was working with used essentially the same code compiled on Linux and it was identical.
+
+#+begin_src c
+void transpose(long A[M][M]) {
+    long i, j;
+    for(i = 0; i < M; i++) {
+        for (j = 0; j < i; j++) {
+            long t = *(*(A + j) + i);
+            A[i][j] = *(*(A + i) + j);
+            *(*(A + j) + i) = t;
+        }
+    }
+}
+#+end_src
+
+#+BEGIN_SRC asm
+movl    $10, %edi
+callq   _putchar
+incq    %r15
+addq    $32, %r12
+cmpq    $4, %r15
+jne LBB0_1
+#+END_SRC
+
+*** 3.70
+**** a)
+e1.p = 0
+e1.y = 8
+e2.x = 0
+e2.next = 8
+**** b) the structure requires 16 bytes
+**** c)
+#+BEGIN_SRC c
+void proc (union ele *up) {
+  up->e2.x = *(up->e2.next->e1.p) - up->next->e1.y;
+}
+#+END_SRC
+** Set 4
+#+LaTeX: \setcounter{secnumdepth}{0}
+#+OPTIONS:   num:nil
+*** 4.45
+A) This isn't correct because we learn in 4.7 that pushq %rsp pushes the old
+value of the stack pointer, and this is pushing the new value.
+B) Flip it but store on the stack at where the stack pointer will be moved to:
+#+begin_src asm
+movq    REG, 8(%rsp)
+subq    $8, %rsp
+#+end_src
+*** 4.46
+A) This isn't correct for similar reasons as described in the previous problem, the right value must be returned
+B) 
+#+begin_src asm
+addq    $8, %rsp
+movq    -8(%rsp), REG
+#+end_src
+*** 424-2
+A) The array can be up to around 8375000 bytes (I used a char array) before seg faulting. I couldn't get an exact number because it would sometimes seg fault and sometimes not, but this is close. The stack size for this OS was 8192kb (8388608 bytes) which is quite close to the reported size, which makes sense since the program is very tiny. Running on MacOS instead of Linux yielded about the same results since they have the same stack size. The results were only slightly different using -m64 and -m32.
+
+#+begin_src c
+  1 #include <stdio.h>
+  2 void main() {
+  3     long size = 8375000; // this is changed manually
+  4     char a[size];
+  5     printf("size: %ld\n", size);
+  6 }
+#+end_src
+
+Error message received: `Segmentation fault (core dumped)`
+
+Screenshots:
+Working sometimes on reported value
+[[file:media/20200206_172736_FJUCK1.png]]
+Failing on too high of a value
+[[file:media/20200206_172935_DoPW8p.png]]
+After changing the stack limit to 10000, previous failing value works
+[[file:media/20200206_173208_SeVdPc.png]]
+
+B) The maximum depth was 319732 on Linux for 10000 stack size and 261913 for 8192 stack size on Linux. For 8192 stack size on Mac, it was 261977. When compiling with the -Os flag on either machine, it actually didn't stop for as long as I ran it (I stopped it after running for several minutes at 134100419). The results were only slightly different using -m64 and -m32.
+
+#+begin_src c
+  1 #include <stdio.h>
+  2
+  3 void recurse(int level) {
+  4     printf("%d\n", level);
+  5     recurse(level + 1);
+  6 }
+  7
+  8 void main() {
+  9     recurse(1);
+ 10 }
+#+end_src
+
+Error message received: `Segmentation fault (core dumped)`
+
+Screenshots:
+With stack size=10000
+[[file:media/20200206_174404_zL0RkG.png]]
+With stack size=8192
+[[file:media/20200206_174512_GYgXYz.png]]
+** Set 5
+*** 4.47
+**** A
+Pointer bubble function code
+#+begin_src c
+void bubble_a(long *data, long count) {
+  long i, last;
+  for (last = count-1; last > 0; last--) {
+    for (i = 0; i < last; i++)
+      if (data[i+1] < data[i]) {
+        /* Swap adjacent elements */
+        long t = data[i+1];
+        data[i+1] = data[i];
+        data[i] = t;
+      }
+  }
+}
+#+end_src
+
+Output showing identical functionality:
+#+begin_src
+rw@ubuntu:/mnt/hgfs/I521581/CloudStation/e424/hw5$ ./a.out
+array version
+  Before: 0xdddd 0xeeee 0xbbbb 0xaaaa 0xffff 0xcccc
+  After:  0xaaaa 0xbbbb 0xcccc 0xdddd 0xeeee 0xffff
+pointer version
+  Before: 0xdddd 0xeeee 0xbbbb 0xaaaa 0xffff 0xcccc
+  After:  0xaaaa 0xbbbb 0xcccc 0xdddd 0xeeee 0xffff
+#+end_src
+
+**** B
+y86 assembly:
+#+begin_src asm
+ 23 # void Bubble(long *data, long count)
+ 24 Bubble: irmovq $1, %r11
+ 25         subq %r11, %rsi
+ 26         jmp L10
+ 27 L11:    irmovq $1, %r11    #cmpq
+ 28         addq %r11, %rax
+ 29 L13:    rrmovq %rax, %r11
+ 30         subq %rsi, %r11
+ 31         jge L15
+ 32         rrmovq %rax, %r8   # == leaq 8(%rdi,%rax,8), %r8
+ 33         addq %r8, %r8
+ 34         addq %r8, %r8
+ 35         addq %r8, %r8
+ 36         addq %rdi, %r8
+ 37         irmovq $8, %r11    #cmpq
+ 38         addq %r11, %r8     # done
+ 39         mrmovq (%r8), %rcx
+ 40         rrmovq %rax, %rdx  # == leaq (%rdi,%rax,8), %rdx
+ 41         addq %rdx, %rdx
+ 42         addq %rdx, %rdx
+ 43         addq %rdx, %rdx
+ 44         addq %rdi, %rdx    # done
+ 45         mrmovq (%rdx), %r9
+ 46         rrmovq %rcx, %r11
+ 47         subq %r9, %r11
+ 48         jge L11
+ 49         rmmovq %r9, (%r8)
+ 50         rmmovq %rcx, (%rdx)
+ 51         jmp L11
+ 52 L15:    irmovq $1, %r11
+ 53         subq %r11, %rsi
+ 54         rrmovq %rsi, %r11
+ 55 L10:    andq %rsi, %r11
+ 56         jle L16
+ 57         irmovq $0, %rax
+ 58         jmp L13
+ 59 L16:    ret
+#+end_src
+
+Program output:
+#+begin_src
+rw@ubuntu:/mnt/hgfs/I521581/CloudStation/e424/hw5$ tools/yis 47.yo
+Stopped in 417 steps at PC = 0x13.  Status 'HLT', CC Z=1 S=0 O=0
+Changes to registers:
+%rax:   0x0000000000000000      0x0000000000000001
+%rcx:   0x0000000000000000      0x000000000000bbbb
+%rdx:   0x0000000000000000      0x0000000000000018
+%rsp:   0x0000000000000000      0x0000000000000200
+%rdi:   0x0000000000000000      0x0000000000000018
+%r8:    0x0000000000000000      0x0000000000000020
+%r9:    0x0000000000000000      0x000000000000aaaa
+
+Changes to memory:
+0x0018: 0x000000000000dddd      0x000000000000aaaa
+0x0020: 0x000000000000eeee      0x000000000000bbbb
+0x0028: 0x000000000000bbbb      0x000000000000cccc
+0x0030: 0x000000000000aaaa      0x000000000000dddd
+0x0038: 0x000000000000ffff      0x000000000000eeee
+0x0040: 0x000000000000cccc      0x000000000000ffff
+0x01f0: 0x0000000000000000      0x000000000000006d
+0x01f8: 0x0000000000000000      0x0000000000000013
+#+end_src
+
+This output is correct because the memory matches the output of the memory from
+running my C version of the code, and the two values at the bottom are values of
+the stack from the calls.
+
+*** 4.51
+|------------+---------------------------------+-----------------------------------------------|
+| Stage      | iaddq V, rB                     | Notes                                         |
+|------------+---------------------------------+-----------------------------------------------|
+| Fetch      | $icode:ifun \leftarrow M_1[PC]$ | load first byte of PC for opcode and function |
+|            | $rA:rB \leftarrow M_1[PC+1]$    | byte 2 of instr has dest reg (src reg unused) |
+|            | $valC \leftarrow M_8[PC+2]$     | byte 3-10 have immediate val V                |
+|            | $valP \leftarrow PC + 10$       | address of next instruction(?)                |
+| Decode     | $valB \leftarrow R[rB]$         |                                               |
+| Execute    | $valE \leftarrow valB + valC$   | alu has to add 0 to work                      |
+| Memory     |                                 |                                               |
+| Write Back | $R[rb] \leftarrow valE$         | save result in original reg                   |
+|------------+---------------------------------+-----------------------------------------------|
+** Set 6
+One problem - 424-3
+*** Part 1
+The time stamp counter (TSC) was once an ideal solution for a program to get CPU
+timing information, but with the addition of multi-core and hyperthreaded CPUs,
+this is no longer accurate. There are several problems that could occur if the
+interval is wrong: rate of tick can vary between each processor core; no promise that the timestamps of multiple CPUs will be synchronized; the CPU may change due to power-saving features or temporarily stop from hibernation; out of order execution; and relying on the counter reduces portability. This poses a problem for repeatability since repeating the same instructions using TSC may yield different results at different times or on different processors.
+
+*** Part 2
+This code assumes that the problems above may occur but has mechanisms in-place that help ensure reliable CPE measurements. It does so by first taking repeated measurements of a range of vectors of different lengths to get an average time. It then determines the slope of the line that best fits the resulting data, and outputs the final results as CPE. this addresses problems above by getting an average of the possibly-varying TSC information above so differences from problems are evened out. Strengths of this approach include taking the average computation lengths and also having a threshold to identify if differences between the top 3 runs of each vector length vary too much. This allows the user to know if timing is being unreliable rather than not reporting. However, weaknesses include that this program incurs a lot of overhead and time in calculating the best CPE due to sets of calculations on many sets of vectors, when just getting a rough CPE might be more acceptable in certain circumstances.
+
+*** Part 3
+The parameters that control this program include VECVALS (number of unique vector lengths tests), VECMAX (max vector lengths for loop runs), MEASMAX (the number of runs to make for each vector length), and THRESHOLD (the max difference we would like to see between timings of the top 3 runs).
+
+I chose to examine THRESHOLD because I was getting numerous errors about exceeding the threshold each time I ran the program at the default value (0.005). I tested with several larger values and noticed that the highest difference I see was about 11%. Changing the threshold to be higher than this seemed like it would make the program significantly less valuable, so I chose to keep the value the same at 0.005.
+
+To instead counter the problem described above (seeing the threshold warning too often), I decided to increase the MEASMAX value instead to provide a more distributed amount of runs to pull the 3 top runs from. After experimenting with several values, I settled with 100 runs (up from 20 originally) as a good value, as I only got a warning about 10% of the time instead of 90% of the time, which seems like an acceptable trade-off between reliability and speed. This value could easily be increased if necessary.
+
+*** Part 4
+
+| Function | long add | long multiply | double add | double multiple |
+|----------+----------+---------------+------------+-----------------|
+| combine1 |     10.2 |          l0.1 |       10.2 |            11.0 |
+| combine2 |      7.2 |           9.1 |        9.2 |            11.0 |
+| combine3 |      7.3 |           9.1 |        9.1 |            11.1 |
+| combine4 |      1.5 |           3.2 |        3.1 |             5.1 |
+
+*** Part 5
+
+My results were usually a little higher than the results in the book but weren't very far off. I think this could be attributed to a few things, such as how the book used ints and I used longs, as well as my processor is an i9 different from the i7 used in the book. I tried a few optimization levels before settling on -O2 and I'm not sure what the test in the book used.
+** Set 7
+
+*** 6.24
+A)
+
+A track can be read 1/15000 minute, or 250 tracks/min, or 4 ms / track. Since
+the 2 MB file contains 4096 sectors and there are 1000 sectors / track, it has
+to read slightly over 4 tracks to read the file.
+
+#+BEGIN_SRC
+2m is average seek time (max seek time wait would be 4 ms)
+Time to position head over first block = 4ms + 2ms = 6ms
+Read track 1 = 4ms
+position to track 2 = 4ms
+Read track 2 = 4ms
+position to track 3 = 4ms
+Read track 3 = 4ms
+position to track 4 = 4ms
+Read track 4 = 4ms
+position to track 5 = 4ms
+Read track 5 = 4*.096 .384 ms
+#+END_SRC
+
+*Total time to read file = 38.384 ms*
+
+B)
+
+4096 * 6ms = 24.576 seconds
+
+*** 424-4
+
+| dotproduct function number | CPE |
+|----------------------------+-----|
+|               (original) 1 | 6.5 |
+|                          2 | 5.5 |
+|                          3 | 4.8 |
+|                          4 | 4.6 |
+|                          5 | 3.3 |
+|                          6 | 2.4 |
+|                          7 | 1.1 |
+
+My results were sometimes higher and sometimes lower than in the book, but
+decreased at a similar rate. The final dotproduct7 was very close to the same as
+in the book. Differences could come from different processor types and from me
+running from within a Linux VM. This likely means that the processor supports
+all of the same parallel functional units that the book's description has which
+is why it was able to take advantage of the instructions to execute them more efficiently.
+
+Source Code:
+#+begin_src c
+/* the basic function(s) we want to measure */
+228 /* Do dot product of two vectors, abstract version */
+229 void dotproduct1(vec_ptr u, vec_ptr v, data_t *dest)
+230 {
+231     long int i;
+232     *dest = 1.0;
+233     long len = vec_length(u);
+234     for (i = 0; i < len; i++)
+235     {
+236     data_t val1;
+237     data_t val2;
+238     get_vec_element(u, i, &val1);
+239     get_vec_element(v, i, &val2);
+240     *dest = *dest + val1 * val2;
+241     }
+242 }
+243
+244 /* the basic function(s) we want to measure */
+245 /* Do dot product of two vectors, abstract version */
+246 void dotproduct2(vec_ptr u, vec_ptr v, data_t *dest)
+247 {
+248     long int i;
+249     *dest = 1.0;
+250     long len = vec_length(u);
+251     for (i = 0; i < len; i++)
+252     {
+253     data_t val1;
+254     data_t val2;
+255     get_vec_element(u, i, &val1);
+256     get_vec_element(v, i, &val2);
+257     *dest = *dest + val1 * val2;
+258     }
+259 }
+260
+261 /* the basic function(s) we want to measure */
+262 /* Do dot product of two vectors, abstract version */
+263 void dotproduct3(vec_ptr u, vec_ptr v, data_t *dest)
+264 {
+265     long int i;
+266     *dest = 1.0;
+267     long len = vec_length(u);
+268     for (i = 0; i < len; i++)
+269     {
+270     data_t val1 = u->data[i];
+271     data_t val2 = v->data[i];
+272     *dest = *dest + val1 * val2;
+273     }
+274 }
+276 /* the basic function(s) we want to measure */
+277 /* Do dot product of two vectors, abstract version */
+278 void dotproduct4(vec_ptr u, vec_ptr v, data_t *dest)
+279 {
+280     long int i;
+281     data_t results = 1;
+282     long len = vec_length(u);
+283     *dest = 1.0;
+284     for (i = 0; i < len; i++)
+285     {
+286     data_t val1 = u->data[i];
+287     data_t val2 = v->data[i];
+288     results = results + val1 * val2;
+289     }
+290     *dest = results;
+291 }
+292
+293 /* the basic function(s) we want to measure */
+294 /* Do dot product of two vectors, abstract version */
+295 void dotproduct5(vec_ptr u, vec_ptr v, data_t *dest)
+296 {
+297     long int i;
+298     //accumulators
+299     data_t a1 = 1;
+300     *dest = 1.0;
+301     long len = vec_length(u);
+302     long limit = len-1;
+303     for (i = 0; i < len; i+=2)
+304     {
+305     data_t val1 = u->data[i];
+306     data_t val2 = v->data[i];
+307     data_t val3 = u->data[i+1];
+308     data_t val4 = v->data[i+1];
+309     a1 = a1 + (val1 * val2) + (val3 * val4);
+310     }
+311     for (; i < len; i++) {
+312         a1 = a1 + (u->data[i] + v->data[i]);
+313     }
+314     *dest = a1;
+315 }
+316
+317 /* the basic function(s) we want to measure */
+318 /* Do dot product of two vectors, abstract version */
+319 void dotproduct6(vec_ptr u, vec_ptr v, data_t *dest)
+320 {
+321     long int i;
+322     //accumulators
+323     data_t a1 = 1;
+324     data_t a2 = 1;
+325     *dest = 1.0;
+326     long len = vec_length(u);
+327     long limit = len-1;
+328     for (i = 0; i < limit; i+=2)
+329     {
+330     data_t val1 = u->data[i];
+331     data_t val2 = v->data[i];
+332     data_t val3 = u->data[i+1];
+333     data_t val4 = v->data[i+1];
+334     a1 = a1 + (val1 * val2);
+335     a2 = a2 + (val3 * val4);
+336     }
+337     for (; i < len; i++) {
+338         a1 = a1 + (u->data[i] + v->data[i]);
+339     }
+340     *dest = a1 + a2;
+341 }
+342
+343 /* the basic function(s) we want to measure */
+344 /* Do dot product of two vectors, abstract version */
+345 void dotproduct7(vec_ptr u, vec_ptr v, data_t *dest)
+346 {
+347     long int i;
+348     long len = vec_length(u);
+349     long limit = len-1;
+350     //accumulators
+351     data_t a1 = 1;
+352     //data_t a2 = 1;
+353     *dest = 1.0;
+354     for (i = 0; i < limit; i+=2)
+355     {
+356     a1 = a1 + (u->data[i] * v->data[i] + u->data[i+1] * v->data[i+1]);
+357     }
+358     for (; i < len; i++) {
+359         a1 = a1 + (u->data[i] + v->data[i]);
+360     }
+361
+362     *dest = a1;
+363 }
+
+#+end_src
+
+*** 424-5
+The absdiff function tests two values and takes a branch if one is greater than
+the other. The initarrays function is set such that is has the same value every time you
+call it, so the branch prediction can be tested since it will remain the same
+every time a branch is taken. However, by providing random values to the absdiff
+function, even the branch prediction methods will only get about 50% right
+because the branches are truly random.
+
+While running on Ubuntu Linux 18.04 with an Intel i9 8-core processor, the best
+time for predictable branches was 6 and for unpredictable branches was 18.
+
+After using conditional moves instead, it went down to a time of 3 for both
+predictable and unpredictable branches, increasing by 3 and by 15, respectively.
+** Set 8
+*** 6.26
+| Cache |  m |    C |  B | E |   S |  t | s | b |
+|-------+----+------+----+---+-----+----+---+---|
+|     1 | 32 | 2048 |  8 | 1 | 256 | 21 | 8 | 3 |
+|     2 | 32 | 2048 |  8 | 2 | 128 | 23 | 7 | 2 |
+|     3 | 32 | 1024 |  2 | 8 |  64 | 25 | 6 | 1 |
+|     4 | 32 | 1024 | 32 | 2 |  16 | 23 | 4 | 5 |
+*** 6.27
+A) 0x8A4 0x8A5 0x8A6 0x8A7 0x0704 0x0705 0x0706 0x0707
+B) 0x1238 0x1239 0x123A 0x123B
+*** 6.29
+A)
+| 11 | 10 |  9 |  8 |  7 |  6 |  5 |  4 |  3 |  2 |  1 |  0 |
+|----+----+----+----+----+----+----+----+----+----+----+----|
+| CT | CT | CT | CT | CT | CT | CT | CT | CI | CI | CO | CO |
+B)
+| Operation | Address | Address (binary) | Tag | Set | Offset | Hit? | Read Value |
+| Read      |   0x834 | 0 1000 0011 0100 |  83 |   1 |      0 | No   | Unknown    |
+| Write     |   0x836 | 0 1000 0011 0110 |  83 |   1 |      2 | Yes  | Unknown    |
+| Read      |   0xFFD | 0 1111 1111 1101 |  FF |   3 |      1 | Yes  | C0         |
+*** 6.38
+A) 1024 writes (16*16*4)
+B) 128 misses
+C) 12.5%
+*** 6.39
+A) 1024 writes
+B) 256 misses
+C) 25%
+*** 424-7
+There isn't a lot of difference between cold and warm cache until about SQSIZE = 16, which is the greatest difference between warm and cold. This might be because it is a power of 2 and that power of two happened to fit into cache blocks well. Comparing good and poor locality, the greatest difference it was also at 16, though the results were rather inconsistent and this could change. This could be for the same reason as listed above with cache blocks. Compiling with optimization flags was about as effective as not using optimization, but above 16 it became significantly worse than non optimized builds. The optimization must make some sort of locality assumption that doesn't hold after 16 and actually decreases performance.
+
+Sample of Results for SQSIZE
+| Name              |  1 |   8 |  16 |  24 |  32 |
+|-------------------+----+-----+-----+-----+-----|
+| cold cache        |  1 | 1.5 | 1.9 | 1.8 | 1.9 |
+| warm cache        |  1 |   1 |   1 |   1 | 1.1 |
+| warm -O3          | .9 | 1.6 | 1.8 | 1.6 | 1.5 |
+| cold -O3          | .9 |   4 |  10 | 4.3 | 4.6 |
+| poor locality     | .9 |  .8 | 1.2 | 1.6 | 1.5 |
+| poor locality -O3 |  1 |  .9 | 1.1 | 1.9 |   2 |
